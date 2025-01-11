@@ -1,34 +1,59 @@
 import streamlit as st
-from ultralytics import YOLO
 from PIL import Image
+import torch
+import os
 
-# Load YOLOv8 model
-model = YOLO("best.pt")
+def load_model():
+    """Load the YOLO model."""
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    return model
 
-# Streamlit app
-st.title("Blood Cell Prediction")
+def predict(model, image_path):
+    """Run predictions on the input image."""
+    results = model(image_path)
+    return results
 
-# Image uploader
-uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+def save_uploaded_file(uploaded_file):
+    """Save the uploaded file to a temporary location."""
+    temp_dir = "temp"
+    os.makedirs(temp_dir, exist_ok=True)
+    file_path = os.path.join(temp_dir, uploaded_file.name)
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return file_path
 
-if uploaded_image is not None:
-    # Display uploaded image
-    image = Image.open(uploaded_image)
-    
-    # Create two columns
-    col1, col2 = st.columns(2)
-    
-    # Process the image when button is clicked
-    if st.button("Predict"):
-        st.write("Processing...")
-        
-        # Perform prediction
-        results = model(image)
-        
-        # Get image with bounding boxes
-        result_image = results[0].plot()
+# Streamlit UI
+st.title("Blood Cell Detection with YOLOv5")
 
-        with col1:
-            st.image(image, caption="Uploaded Image", use_column_width=True)
-        with col2:
-            st.image(result_image, caption="Prediction Result", use_column_width=True)
+# Load YOLO model
+st.sidebar.header("Model Loading")
+with st.spinner("Loading YOLOv5 model..."):
+    model = load_model()
+st.sidebar.success("Model loaded successfully!")
+
+# Upload image
+uploaded_file = st.file_uploader("Upload a Blood Cell Image", type=["jpg", "jpeg", "png"])
+
+if uploaded_file:
+    # Display the uploaded image
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+    st.write("")
+
+    # Save the uploaded image
+    image_path = save_uploaded_file(uploaded_file)
+
+    # Predict and display results
+    st.write("## Predictions")
+    with st.spinner("Running YOLOv5 on the uploaded image..."):
+        results = predict(model, image_path)
+
+    # Render results
+    results.render()  # Save annotated images to results.imgs
+    annotated_image = Image.fromarray(results.imgs[0])
+    st.image(annotated_image, caption="Annotated Image", use_column_width=True)
+
+    # Optional: Display raw prediction data
+    if st.checkbox("Show Prediction Details"):
+        st.json(results.pandas().xyxy[0].to_dict())
+
+st.sidebar.info("Developed with Streamlit and YOLOv5")
